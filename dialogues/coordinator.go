@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v9"
-	proxysql "github.com/kirinrastogi/proxysql-go"
 	"github.com/labstack/echo"
+	proxysql "github.com/rinser/hw4/proxy-sql"
 )
 
 const (
@@ -28,7 +28,7 @@ type Coordinator struct {
 	dedicatedHosts map[int64]*sql.DB
 }
 
-func NewCoordinator(proxySqlConnection string, redisHost string) Coordinator {
+func NewCoordinator(proxySqlConnection string, redisHost string) (*Coordinator, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -41,22 +41,25 @@ func NewCoordinator(proxySqlConnection string, redisHost string) Coordinator {
 
 	conn, err := proxysql.NewProxySQL(proxySqlConnection)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	err = conn.Clear()
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	dc := Coordinator{
+	dc := &Coordinator{
 		ctx:  ctx,
 		rdb:  rdb,
 		conn: conn,
 	}
-	dc.initHosts()
+	err = dc.initHosts()
+	if err != nil {
+		return nil, err
+	}
 
-	return dc
+	return dc, nil
 }
 
 // API handlers
@@ -78,11 +81,11 @@ func (dc *Coordinator) AddUser(c echo.Context) (err error) {
 	if err != nil {
 		return
 	}
-	_, err = tx.Exec(`INSERT INTO users (login) values (?)`)
+	_, err = tx.Exec(`INSERT INTO users (login) values (?);`)
 	if err != nil {
 		return
 	}
-	row := tx.QueryRow(`SELECT LAST_INSERT_ID()`)
+	row := tx.QueryRow(`SELECT LAST_INSERT_ID();`)
 	row.Scan(&u.Id)
 	return c.JSON(http.StatusCreated, u.Id)
 }
@@ -95,7 +98,7 @@ func (dc *Coordinator) AddMessage(c echo.Context) (err error) {
 	}
 	host := dc.getUserHost(msg.From)
 	_, err = host.Exec(`
-	INSERT INTO messages (from, to, text, at) VALUES (?, ?, ?, ?)`,
+	INSERT INTO messages (from, to, text, at) VALUES (?, ?, ?, ?);`,
 		msg.From, msg.To, msg.Text, time.Now())
 	go dc.updateHosts(*msg)
 	return
@@ -126,7 +129,7 @@ func (dc *Coordinator) GetDialogue(c echo.Context) (err error) {
 func (dc *Coordinator) getUserMessages(userId1 int64, userId2 int64) ([]Message, error) {
 	host := dc.getUserHost(userId1)
 	rows, err := host.Query(
-		`SELECT from, to, text, at FROM queries WHERE from = ? and to = ?`,
+		`SELECT from, to, text, at FROM queries WHERE from = ? and to = ?;`,
 		userId1, userId2)
 	if err != nil {
 		return nil, err
@@ -166,7 +169,7 @@ func (dc *Coordinator) updateHosts(msg Message) {
 		// load all the existing messages
 		currentHost := dc.getUserHost(msg.From)
 		rows, err := currentHost.Query(
-			`SELECT from, to, text, at FROM messages WHERE from = ?`, msg.From)
+			`SELECT from, to, text, at FROM messages WHERE from = ?;`, msg.From)
 		if err != nil {
 			log.Print(err)
 			return
@@ -214,7 +217,7 @@ func (dc *Coordinator) updateHosts(msg Message) {
 					text TEXT,
 					at   TIMESTAMP,
 					PRIMARY KEY(from, to, at)
-				)`)
+				);`)
 				if err != nil {
 					log.Print(err)
 					return
@@ -225,6 +228,7 @@ func (dc *Coordinator) updateHosts(msg Message) {
 					query += " (?, ?, ?, ?)"
 					vals = append(vals, msg.From, msg.To, msg.Text, msg.At)
 				}
+				query += ";"
 				stmt, err := dc.dedicatedHosts[msg.From].Prepare(query)
 				if err != nil {
 					log.Print(err)
@@ -242,10 +246,10 @@ func (dc *Coordinator) updateHosts(msg Message) {
 }
 
 func (dc *Coordinator) initHosts() (err error) {
-	_, err = dc.conn.Conn().Exec(`CREATE DATABASE IF NOT EXISTS dialogues`)
-	if err != nil {
-		return
-	}
+	// _, err = dc.conn.Conn().Exec(`CREATE DATABASE IF NOT EXISTS dialogues;`)
+	// if err != nil {
+	// 	return
+	// }
 	dc.hosts = make(map[int64]*sql.DB)
 	dc.dedicatedHosts = make(map[int64]*sql.DB)
 	hosts, err := dc.conn.All()
@@ -253,7 +257,7 @@ func (dc *Coordinator) initHosts() (err error) {
 		return
 	}
 	if len(hosts) < 2 {
-		err = dc.conn.AddHost(proxysql.Hostname("users"),
+		err = dc.conn.AddHost(proxysql.Hostname("0"),
 			proxysql.HostgroupID(UserDataHostGroupId))
 		if err != nil {
 			return
@@ -293,7 +297,7 @@ func (dc *Coordinator) initHosts() (err error) {
 				text TEXT,
 				at   TIMESTAMP,
 				PRIMARY KEY(from, to, at)
-			)`)
+			);`)
 		case DedicatedHostsGroupId:
 			dc.dedicatedHosts[hostId], err = connectToHost(host.Port())
 		case UserDataHostGroupId:
@@ -305,7 +309,7 @@ func (dc *Coordinator) initHosts() (err error) {
 			CREATE TABLE IF NOT EXISTS users (
 				id    BIGINT AUTO_INCREMENT PRIMARY KEY,
 				login VARCHAR(25)
-			)`)
+			);`)
 		}
 		if err != nil {
 			return
@@ -316,5 +320,5 @@ func (dc *Coordinator) initHosts() (err error) {
 
 func connectToHost(port int) (*sql.DB, error) {
 	return sql.Open("mysql",
-		"client:password@localhost:"+strconv.Itoa(port)+"/dialogues")
+		"client:password@tcp(localhost:"+strconv.Itoa(port)+")/dialogues")
 }

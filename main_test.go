@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,17 +16,21 @@ import (
 )
 
 var testServer *echo.Echo
-var testCoordinator dialogues.Coordinator
+var testCoordinator *dialogues.Coordinator
 
 func TestMain(m *testing.M) {
 	testServer = echo.New()
-
-	testCoordinator = dialogues.NewCoordinator(
+	var err error
+	testCoordinator, err = dialogues.NewCoordinator(
 		"remote-admin:password@tcp(localhost:6032)/",
 		"localhost:7000")
-
-	exitVal := m.Run()
-	os.Exit(exitVal)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(-1)
+	} else {
+		exitVal := m.Run()
+		os.Exit(exitVal)
+	}
 }
 
 func TestAddUser(t *testing.T) {

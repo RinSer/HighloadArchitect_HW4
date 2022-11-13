@@ -10,7 +10,6 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/go-redis/redis/v9 v9.0.0-rc.1 // indirect
 	github.com/go-sql-driver/mysql v1.6.0 // indirect
-	github.com/kirinrastogi/proxysql-go v0.0.0-20190526205808-f9b00a1315aa // indirect
 	github.com/labstack/echo v3.3.10+incompatible // indirect
 	github.com/labstack/echo/v4 v4.9.1 // indirect
 	github.com/labstack/gommon v0.4.0 // indirect
