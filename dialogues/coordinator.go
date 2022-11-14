@@ -163,7 +163,7 @@ func (dc *Coordinator) updateHosts(msg Message) {
 	}
 	currentUserLoad += len(msg.Text)
 	_ = dc.rdb.Set(dc.ctx, userKey, strconv.Itoa(currentUserLoad), 0)
-	// add dedicated host for a user if necessary
+	// add user to dedicated hosts if necessary
 	if currentUserLoad > 1_000_000 { // > 1Mb
 		dc.dedicatedUsers[msg.From] = true
 	}
