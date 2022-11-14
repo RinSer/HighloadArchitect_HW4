@@ -3,14 +3,14 @@ package dialogues
 import (
 	"context"
 	"database/sql"
-	"log"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/go-redis/redis/v9"
+	proxysql "github.com/kirinrastogi/proxysql-go"
 	"github.com/labstack/echo"
-	proxysql "github.com/rinser/hw4/proxy-sql"
 )
 
 const (
@@ -23,9 +23,9 @@ type Coordinator struct {
 	ctx            context.Context
 	rdb            *redis.Client
 	conn           *proxysql.ProxySQL
-	userHost       *sql.DB
-	hosts          map[int64]*sql.DB
-	dedicatedHosts map[int64]*sql.DB
+	hosts          *sql.DB
+	dedicatedHosts *sql.DB
+	dedicatedUsers map[int64]bool
 }
 
 func NewCoordinator(proxySqlConnection string, redisHost string) (*Coordinator, error) {
@@ -70,7 +70,7 @@ func (dc *Coordinator) AddUser(c echo.Context) (err error) {
 	if err != nil {
 		return
 	}
-	tx, err := dc.userHost.BeginTx(dc.ctx, nil)
+	tx, err := dc.hosts.BeginTx(dc.ctx, nil)
 	defer func() {
 		if err == nil {
 			err = tx.Commit()
@@ -148,11 +148,10 @@ func (dc *Coordinator) getUserMessages(userId1 int64, userId2 int64) ([]Message,
 }
 
 func (dc *Coordinator) getUserHost(userId int64) *sql.DB {
-	if host, ok := dc.dedicatedHosts[userId]; ok {
-		return host
+	if _, ok := dc.dedicatedUsers[userId]; ok {
+		return dc.dedicatedHosts
 	}
-	hostId := userId % int64(len(dc.hosts))
-	return dc.hosts[hostId]
+	return dc.hosts
 }
 
 func (dc *Coordinator) updateHosts(msg Message) {
@@ -166,159 +165,67 @@ func (dc *Coordinator) updateHosts(msg Message) {
 	_ = dc.rdb.Set(dc.ctx, userKey, strconv.Itoa(currentUserLoad), 0)
 	// add dedicated host for a user if necessary
 	if currentUserLoad > 1_000_000 { // > 1Mb
-		// load all the existing messages
-		currentHost := dc.getUserHost(msg.From)
-		rows, err := currentHost.Query(
-			`SELECT from, to, text, at FROM messages WHERE from = ?;`, msg.From)
-		if err != nil {
-			log.Print(err)
-			return
-		}
-		defer rows.Close()
-		msgs := make([]Message, 0)
-		for rows.Next() {
-			msg := Message{}
-			err = rows.Scan(&msg.From, &msg.To, &msg.Text, &msg.At)
-			if err != nil {
-				log.Print(err)
-				return
-			}
-			msgs = append(msgs, msg)
-		}
-		// add new host for a user
-		hostName := strconv.FormatInt(msg.From, 10)
-		err = dc.conn.AddHost(proxysql.Hostname(hostName),
-			proxysql.HostgroupID(DedicatedHostsGroupId))
-		if err != nil {
-			log.Print(err)
-			return
-		}
-		err = dc.conn.PersistChanges()
-		if err != nil {
-			log.Print(err)
-			return
-		}
-		hosts, err := dc.conn.All()
-		if err != nil {
-			log.Print(err)
-			return
-		}
-		for _, host := range hosts {
-			if host.HostgroupID() == DedicatedHostsGroupId &&
-				host.Hostname() == hostName {
-				dc.dedicatedHosts[msg.From], err = connectToHost(host.Port())
-				if err != nil {
-					log.Print(err)
-				}
-				_, err = dc.dedicatedHosts[msg.From].Exec(`
-				CREATE TABLE IF NOT EXISTS messages (
-					from BIGINT,
-					to   BIGINT,
-					text TEXT,
-					at   TIMESTAMP,
-					PRIMARY KEY(from, to, at)
-				);`)
-				if err != nil {
-					log.Print(err)
-					return
-				}
-				query := `INSERT INTO messages (from, to, text, at) VALUES`
-				vals := make([]interface{}, 0)
-				for _, msg := range msgs {
-					query += " (?, ?, ?, ?)"
-					vals = append(vals, msg.From, msg.To, msg.Text, msg.At)
-				}
-				query += ";"
-				stmt, err := dc.dedicatedHosts[msg.From].Prepare(query)
-				if err != nil {
-					log.Print(err)
-					return
-				}
-				defer stmt.Close()
-				_, err = stmt.Exec(vals...)
-				if err != nil {
-					log.Print(err)
-				}
-				return
-			}
-		}
+		dc.dedicatedUsers[msg.From] = true
 	}
 }
 
 func (dc *Coordinator) initHosts() (err error) {
-	// _, err = dc.conn.Conn().Exec(`CREATE DATABASE IF NOT EXISTS dialogues;`)
-	// if err != nil {
-	// 	return
-	// }
-	dc.hosts = make(map[int64]*sql.DB)
-	dc.dedicatedHosts = make(map[int64]*sql.DB)
-	hosts, err := dc.conn.All()
+	dc.hosts, err = connectToHost("test1", "test1")
 	if err != nil {
 		return
 	}
-	if len(hosts) < 2 {
-		err = dc.conn.AddHost(proxysql.Hostname("0"),
-			proxysql.HostgroupID(UserDataHostGroupId))
-		if err != nil {
-			return
-		}
-		for i := 1; i < 4; i++ {
-			err = dc.conn.AddHost(proxysql.Hostname(strconv.Itoa(i)),
-				proxysql.HostgroupID(DedicatedHostsGroupId))
-			if err != nil {
-				return
-			}
-		}
-		err = dc.conn.PersistChanges()
-		if err != nil {
-			return
-		}
-		hosts, err = dc.conn.All()
-		if err != nil {
-			return
-		}
+	_, err = dc.hosts.Exec(`
+	CREATE TABLE IF NOT EXISTS users (
+		id    BIGINT AUTO_INCREMENT PRIMARY KEY,
+		login VARCHAR(25)
+	);`)
+	if err != nil {
+		return
 	}
-	var hostId int64
-	for _, host := range hosts {
-		hostId, err = strconv.ParseInt(host.Hostname(), 10, 64)
-		if err != nil {
-			return
-		}
-		switch host.HostgroupID() {
-		case DefaultHostsGroupId:
-			dc.hosts[hostId], err = connectToHost(host.Port())
-			if err != nil {
-				return
-			}
-			_, err = dc.hosts[hostId].Exec(`
-			CREATE TABLE IF NOT EXISTS messages (
-				from BIGINT,
-				to   BIGINT,
-				text TEXT,
-				at   TIMESTAMP,
-				PRIMARY KEY(from, to, at)
-			);`)
-		case DedicatedHostsGroupId:
-			dc.dedicatedHosts[hostId], err = connectToHost(host.Port())
-		case UserDataHostGroupId:
-			dc.userHost, err = connectToHost(host.Port())
-			if err != nil {
-				return
-			}
-			_, err = dc.hosts[hostId].Exec(`
-			CREATE TABLE IF NOT EXISTS users (
-				id    BIGINT AUTO_INCREMENT PRIMARY KEY,
-				login VARCHAR(25)
-			);`)
-		}
-		if err != nil {
-			return
+	_, err = dc.hosts.Exec(`
+	CREATE TABLE IF NOT EXISTS messages (
+		from BIGINT,
+		to   BIGINT,
+		text TEXT,
+		at   TIMESTAMP,
+		PRIMARY KEY(from, to, at)
+	);`)
+	if err != nil {
+		return
+	}
+	dc.dedicatedHosts, err = connectToHost("test2", "test2")
+	if err != nil {
+		return
+	}
+	_, err = dc.hosts.Exec(`
+	CREATE TABLE IF NOT EXISTS messages (
+		from BIGINT,
+		to   BIGINT,
+		text TEXT,
+		at   TIMESTAMP,
+		PRIMARY KEY(from, to, at)
+	);`)
+	if err != nil {
+		return
+	}
+	// initialize dedicated users
+	userIds, err := dc.rdb.Keys(dc.ctx, "\\d+").Result()
+	if err != nil {
+		return
+	}
+	for _, userId := range userIds {
+		currentUserLoadValue, _ := dc.rdb.Get(dc.ctx, userId).Result()
+		currentUserLoad, _ := strconv.ParseInt(currentUserLoadValue, 10, 64)
+		if currentUserLoad > 1_000_000 { // 1Mb
+			userIdInt, _ := strconv.ParseInt(userId, 10, 64)
+			dc.dedicatedUsers[userIdInt] = true
 		}
 	}
 	return
 }
 
-func connectToHost(port int) (*sql.DB, error) {
+func connectToHost(user string, password string) (*sql.DB, error) {
 	return sql.Open("mysql",
-		"client:password@tcp(localhost:"+strconv.Itoa(port)+")/dialogues")
+		fmt.Sprintf("%s:%s@tcp(localhost:6032)/dialogues",
+			user, password))
 }

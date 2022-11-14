@@ -6,26 +6,91 @@ admin_variables=
 {
   mysql_ifaces="0.0.0.0:6032"
   admin_credentials="admin:password;remote-admin:password"
+  debug=true
 }
 
 mysql_variables=
 {
-  interfaces="0.0.0.0:3306"
-  shun_on_failures=999999
-  shun_recovery_time_sec=0
+  threads=4
+  mysql-auditlog_filename="mysql.log"
+  max_connections=2048
+  default_query_delay=0
+  default_query_timeout=36000000
+  have_compress=false
+  poll_timeout=2000
+  mysql-autocommit_false_is_transaction=true
+  interfaces="0.0.0.0:6033"
+  default_schema="information_schema"
+  stacksize=1048576
+  server_version="8.0.0"
+  mysql-forward_autocommit=true
+  connect_timeout_server=3000
+  monitor_username="root"
+  monitor_password="toor"
+  monitor_history=600000
+  monitor_connect_interval=60000
+  monitor_ping_interval=10000
+  monitor_read_only_interval=1500
+  monitor_read_only_timeout=500
+  ping_interval_server_msec=120000
+  ping_timeout_server=500
+  commands_stats=true
+  sessions_sort=true
+  connect_retries_on_failure=10
 }
 
-# defines all the MySQL users
+mysql_servers =
+(
+ 	{
+ 		address="127.0.0.1"
+ 		port=3301
+ 		hostgroup=1
+ 		max_connections=200
+ 	},
+  {
+ 		address="127.0.0.1"
+ 		port=3302
+ 		hostgroup=1
+ 		max_connections=200
+ 	},
+  {
+ 		address="127.0.0.1"
+ 		port=3303
+ 		hostgroup=1
+ 		max_connections=200
+ 	},
+  {
+ 		address="127.0.0.1"
+ 		port=3304
+ 		hostgroup=2
+ 		max_connections=200
+ 	},
+  {
+ 		address="127.0.0.1"
+ 		port=3305
+ 		hostgroup=2
+ 		max_connections=200
+ 	}
+)
+
 mysql_users:
 (
+ 	{
+ 		username = "test1"
+    password ="test1"
+ 		default_hostgroup = 1
+ 		max_connections=1000
+ 		default_schema="dialogues"
+ 		active = 1
+ 	},
   {
-    username = "client"
-    password = "password"
-    default_schema = "mysql"
-    max_connections=50000
-    active = 1
-    transaction_persistent=1
-  }
+ 		username = "test2"
+    password ="test2"
+ 		default_hostgroup = 2
+ 		max_connections=1000
+ 		default_schema="dialogues"
+ 		active = 1
+ 	}
 )
 
 #defines MySQL Query Rules
