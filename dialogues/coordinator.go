@@ -98,7 +98,7 @@ func (dc *Coordinator) AddMessage(c echo.Context) (err error) {
 	}
 	host := dc.getUserHost(msg.From)
 	_, err = host.Exec(`
-	INSERT INTO messages (from, to, txt, at) VALUES (?, ?, ?, ?);`,
+	INSERT INTO messages (source, dest, txt, at) VALUES (?, ?, ?, ?);`,
 		msg.From, msg.To, msg.Text, time.Now())
 	go dc.updateHosts(*msg)
 	return
@@ -129,7 +129,7 @@ func (dc *Coordinator) GetDialogue(c echo.Context) (err error) {
 func (dc *Coordinator) getUserMessages(userId1 int64, userId2 int64) ([]Message, error) {
 	host := dc.getUserHost(userId1)
 	rows, err := host.Query(
-		`SELECT from, to, txt, at FROM queries WHERE from = ? and to = ?;`,
+		`SELECT source, dest, txt, at FROM queries WHERE from = ? and to = ?;`,
 		userId1, userId2)
 	if err != nil {
 		return nil, err
@@ -184,11 +184,11 @@ func (dc *Coordinator) initHosts() (err error) {
 	}
 	_, err = dc.hosts.Exec(`
 	CREATE TABLE IF NOT EXISTS messages (
-		from BIGINT,
-		to   BIGINT,
-		txt  TEXT,
-		at   TIMESTAMP,
-		PRIMARY KEY(from, to, at)
+		source BIGINT,
+		dest   BIGINT,
+		txt    TEXT,
+		at     TIMESTAMP,
+		PRIMARY KEY(source, dest, at)
 	);`)
 	if err != nil {
 		return
@@ -199,11 +199,11 @@ func (dc *Coordinator) initHosts() (err error) {
 	}
 	_, err = dc.hosts.Exec(`
 	CREATE TABLE IF NOT EXISTS messages (
-		from BIGINT,
-		to   BIGINT,
-		text TEXT,
-		at   TIMESTAMP,
-		PRIMARY KEY(from, to, at)
+		source BIGINT,
+		dest   BIGINT,
+		txt    TEXT,
+		at     TIMESTAMP,
+		PRIMARY KEY(source, dest, at)
 	);`)
 	if err != nil {
 		return
