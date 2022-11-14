@@ -98,7 +98,7 @@ func (dc *Coordinator) AddMessage(c echo.Context) (err error) {
 	}
 	host := dc.getUserHost(msg.From)
 	_, err = host.Exec(`
-	INSERT INTO messages (from, to, text, at) VALUES (?, ?, ?, ?);`,
+	INSERT INTO messages (from, to, txt, at) VALUES (?, ?, ?, ?);`,
 		msg.From, msg.To, msg.Text, time.Now())
 	go dc.updateHosts(*msg)
 	return
@@ -129,7 +129,7 @@ func (dc *Coordinator) GetDialogue(c echo.Context) (err error) {
 func (dc *Coordinator) getUserMessages(userId1 int64, userId2 int64) ([]Message, error) {
 	host := dc.getUserHost(userId1)
 	rows, err := host.Query(
-		`SELECT from, to, text, at FROM queries WHERE from = ? and to = ?;`,
+		`SELECT from, to, txt, at FROM queries WHERE from = ? and to = ?;`,
 		userId1, userId2)
 	if err != nil {
 		return nil, err
@@ -186,7 +186,7 @@ func (dc *Coordinator) initHosts() (err error) {
 	CREATE TABLE IF NOT EXISTS messages (
 		from BIGINT,
 		to   BIGINT,
-		text TEXT,
+		txt  TEXT,
 		at   TIMESTAMP,
 		PRIMARY KEY(from, to, at)
 	);`)
@@ -226,6 +226,6 @@ func (dc *Coordinator) initHosts() (err error) {
 
 func connectToHost(user string, password string) (*sql.DB, error) {
 	return sql.Open("mysql",
-		fmt.Sprintf("%s:%s@tcp(localhost:6032)/dialogues",
+		fmt.Sprintf("%s:%s@tcp(localhost:6033)/dialogues",
 			user, password))
 }

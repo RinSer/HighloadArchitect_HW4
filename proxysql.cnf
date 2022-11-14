@@ -47,25 +47,25 @@ mysql_servers =
  		hostgroup=1
  		max_connections=200
  	},
-  {
+    {
  		address="mysql2"
  		port=3306
  		hostgroup=1
  		max_connections=200
  	},
-  {
+    {
  		address="mysql3"
  		port=3306
  		hostgroup=1
  		max_connections=200
  	},
-  {
+    {
  		address="mysql4"
  		port=3306
  		hostgroup=2
  		max_connections=200
  	},
-  {
+    {
  		address="mysql5"
  		port=3306
  		hostgroup=2
@@ -77,15 +77,15 @@ mysql_users:
 (
  	{
  		username = "test1"
-    password ="test1"
+    	password ="test1"
  		default_hostgroup = 1
  		max_connections=1000
  		default_schema="dialogues"
  		active = 1
  	},
-  {
+    {
  		username = "test2"
-    password ="test2"
+    	password ="test2"
  		default_hostgroup = 2
  		max_connections=1000
  		default_schema="dialogues"
