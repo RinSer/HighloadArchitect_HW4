@@ -21,6 +21,7 @@ const (
 
 type Coordinator struct {
 	ctx            context.Context
+	CancelCtx      context.CancelFunc
 	rdb            *redis.Client
 	conn           *proxysql.ProxySQL
 	hosts          *sql.DB
@@ -29,8 +30,13 @@ type Coordinator struct {
 }
 
 func NewCoordinator(proxySqlConnection string, redisHost string) (*Coordinator, error) {
+	var err error
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	defer func() {
+		if err != nil {
+			cancel()
+		}
+	}()
 
 	// connect to redis
 	rdb := redis.NewClient(&redis.Options{
@@ -50,9 +56,10 @@ func NewCoordinator(proxySqlConnection string, redisHost string) (*Coordinator, 
 	}
 
 	dc := &Coordinator{
-		ctx:  ctx,
-		rdb:  rdb,
-		conn: conn,
+		ctx:       ctx,
+		CancelCtx: cancel,
+		rdb:       rdb,
+		conn:      conn,
 	}
 	err = dc.initHosts()
 	if err != nil {
@@ -81,11 +88,12 @@ func (dc *Coordinator) AddUser(c echo.Context) (err error) {
 	if err != nil {
 		return
 	}
-	_, err = tx.Exec(`INSERT INTO users (login) values (?);`)
+	_, err = tx.ExecContext(dc.ctx,
+		`INSERT INTO users (login) values (?);`, u.Login)
 	if err != nil {
 		return
 	}
-	row := tx.QueryRow(`SELECT LAST_INSERT_ID();`)
+	row := tx.QueryRowContext(dc.ctx, `SELECT LAST_INSERT_ID();`)
 	row.Scan(&u.Id)
 	return c.JSON(http.StatusCreated, u.Id)
 }
@@ -97,11 +105,23 @@ func (dc *Coordinator) AddMessage(c echo.Context) (err error) {
 		return
 	}
 	host := dc.getUserHost(msg.From)
-	_, err = host.Exec(`
-	INSERT INTO messages (source, dest, txt, at) VALUES (?, ?, ?, ?);`,
+	tag, err := host.ExecContext(dc.ctx, `
+	INSERT INTO messages (source, dest, txt, createdAt) VALUES (?, ?, ?, ?);`,
 		msg.From, msg.To, msg.Text, time.Now())
-	go dc.updateHosts(*msg)
-	return
+	if err != nil {
+		return
+	}
+	numRows, err := tag.RowsAffected()
+	if err != nil {
+		return
+	}
+	if numRows != 1 {
+		err = fmt.Errorf("could not store message")
+		return
+	} else {
+		go dc.updateHosts(*msg)
+		return c.JSON(http.StatusCreated, nil)
+	}
 }
 
 func (dc *Coordinator) GetDialogue(c echo.Context) (err error) {
@@ -128,8 +148,8 @@ func (dc *Coordinator) GetDialogue(c echo.Context) (err error) {
 
 func (dc *Coordinator) getUserMessages(userId1 int64, userId2 int64) ([]Message, error) {
 	host := dc.getUserHost(userId1)
-	rows, err := host.Query(
-		`SELECT source, dest, txt, at FROM queries WHERE from = ? and to = ?;`,
+	rows, err := host.QueryContext(dc.ctx,
+		`SELECT source, dest, txt, createdAt FROM messages WHERE source = ? and dest = ?;`,
 		userId1, userId2)
 	if err != nil {
 		return nil, err
@@ -184,11 +204,11 @@ func (dc *Coordinator) initHosts() (err error) {
 	}
 	_, err = dc.hosts.Exec(`
 	CREATE TABLE IF NOT EXISTS messages (
-		source BIGINT,
-		dest   BIGINT,
-		txt    TEXT,
-		at     TIMESTAMP,
-		PRIMARY KEY(source, dest, at)
+		source      BIGINT,
+		dest        BIGINT,
+		txt         TEXT,
+		createdAt   TIMESTAMP,
+		PRIMARY KEY(source, dest, createdAt)
 	);`)
 	if err != nil {
 		return
@@ -199,11 +219,11 @@ func (dc *Coordinator) initHosts() (err error) {
 	}
 	_, err = dc.hosts.Exec(`
 	CREATE TABLE IF NOT EXISTS messages (
-		source BIGINT,
-		dest   BIGINT,
-		txt    TEXT,
-		at     TIMESTAMP,
-		PRIMARY KEY(source, dest, at)
+		source      BIGINT,
+		dest        BIGINT,
+		txt         TEXT,
+		createdAt   TIMESTAMP,
+		PRIMARY KEY(source, dest, createdAt)
 	);`)
 	if err != nil {
 		return
@@ -226,6 +246,6 @@ func (dc *Coordinator) initHosts() (err error) {
 
 func connectToHost(user string, password string) (*sql.DB, error) {
 	return sql.Open("mysql",
-		fmt.Sprintf("%s:%s@tcp(localhost:6033)/dialogues",
+		fmt.Sprintf("%s:%s@tcp(localhost:6033)/?parseTime=true",
 			user, password))
 }

@@ -15,6 +15,7 @@ func main() {
 	if err != nil {
 		e.Logger.Fatal(err)
 	} else {
+		defer dc.CancelCtx()
 		// add api routes
 		e.POST("/user", dc.AddUser)
 		e.POST("/message", dc.AddMessage)
