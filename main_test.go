@@ -128,6 +128,8 @@ func TestGetDialogue(t *testing.T) {
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec = httptest.NewRecorder()
 	c = testServer.NewContext(req, rec)
+
+	// Assertions
 	if assert.NoError(t, testCoordinator.GetDialogue(c)) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		var messages []dialogues.Message
