@@ -42,32 +42,32 @@ mysql_variables=
 mysql_servers =
 (
  	{
- 		address="127.0.0.1"
- 		port=3301
+ 		address="mysql1"
+ 		port=3306
  		hostgroup=1
  		max_connections=200
  	},
   {
- 		address="127.0.0.1"
- 		port=3302
+ 		address="mysql2"
+ 		port=3306
  		hostgroup=1
  		max_connections=200
  	},
   {
- 		address="127.0.0.1"
- 		port=3303
+ 		address="mysql3"
+ 		port=3306
  		hostgroup=1
  		max_connections=200
  	},
   {
- 		address="127.0.0.1"
- 		port=3304
+ 		address="mysql4"
+ 		port=3306
  		hostgroup=2
  		max_connections=200
  	},
   {
- 		address="127.0.0.1"
- 		port=3305
+ 		address="mysql5"
+ 		port=3306
  		hostgroup=2
  		max_connections=200
  	}
@@ -91,15 +91,4 @@ mysql_users:
  		default_schema="dialogues"
  		active = 1
  	}
-)
-
-#defines MySQL Query Rules
-mysql_query_rules:
-(
-  {
-    rule_id = 1
-    active = 1
-    match_digest = "@@SESSION"
-    multiplex = 2
-  }
 )
