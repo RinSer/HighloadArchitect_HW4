@@ -4,6 +4,8 @@ go 1.19
 
 require github.com/go-redis/redis v6.15.9+incompatible
 
+require github.com/google/uuid v1.3.0 // indirect
+
 require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

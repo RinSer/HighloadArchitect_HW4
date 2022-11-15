@@ -223,9 +223,9 @@ func (dc *Coordinator) initHosts() (err error) {
 		CREATE TABLE IF NOT EXISTS messages (
 			source      BIGINT,
 			dest        BIGINT,
-			txt         TEXT,
+			txt         VARCHAR(512),
 			createdAt   TIMESTAMP,
-			PRIMARY KEY(source, dest, createdAt)
+			PRIMARY KEY(source, dest, txt, createdAt)
 		);`)
 		if err != nil {
 			return

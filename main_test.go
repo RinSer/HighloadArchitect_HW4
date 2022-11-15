@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo"
 	"github.com/rinser/hw4/dialogues"
 	"github.com/stretchr/testify/assert"
@@ -163,14 +164,14 @@ func BenchmarkAddMessages(b *testing.B) {
 	// Send a lot of messages with
 	// 80% of them from dedicated users
 	b.RunParallel(func(pb *testing.PB) {
-		for i := 0; i < 2_000; i++ {
+		for i := 0; i < 2_0; i++ {
 			userId1 := dedicatedUsers[rand.Int63n(2)]
 			userId2 := users[rand.Int63n(10)]
 			probability := rand.Float32()
 			if probability < 0.2 {
 				userId1 = users[rand.Int63n(10)]
 			}
-			messageJSON := fmt.Sprintf(`{"from":%d,"to":%d,"text":"some message"}`,
+			messageJSON := fmt.Sprintf(`{"from":%d,"to":%d,"text":"`+uuid.New().String()+`"}`,
 				userId1, userId2)
 			req := httptest.NewRequest(http.MethodPost, "/message",
 				strings.NewReader(messageJSON))
