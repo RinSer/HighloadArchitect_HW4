@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-redis/redis/v9"
 	proxysql "github.com/kirinrastogi/proxysql-go"
@@ -69,6 +68,10 @@ func NewCoordinator(proxySqlConnection string, redisHost string) (*Coordinator, 
 	return dc, nil
 }
 
+func (dc *Coordinator) GetDedicatedUsers() map[int64]bool {
+	return dc.dedicatedUsers
+}
+
 // API handlers
 
 func (dc *Coordinator) AddUser(c echo.Context) (err error) {
@@ -106,8 +109,9 @@ func (dc *Coordinator) AddMessage(c echo.Context) (err error) {
 	}
 	host := dc.getUserHost(msg.From)
 	tag, err := host.ExecContext(dc.ctx, `
-	INSERT INTO messages (source, dest, txt, createdAt) VALUES (?, ?, ?, ?);`,
-		msg.From, msg.To, msg.Text, time.Now())
+	INSERT INTO messages (source, dest, txt, createdAt)
+	VALUES (?, ?, ?, CURRENT_TIMESTAMP());`,
+		msg.From, msg.To, msg.Text)
 	if err != nil {
 		return
 	}
