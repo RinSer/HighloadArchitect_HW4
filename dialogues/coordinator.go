@@ -195,41 +195,44 @@ func (dc *Coordinator) updateHosts(msg Message) {
 }
 
 func (dc *Coordinator) initHosts() (err error) {
+	for port := 3301; port < 3306; port++ {
+		user, password := "test1", "test1"
+		if port > 3303 {
+			user, password = "test2", "test2"
+		}
+		var db *sql.DB
+		db, err = sql.Open("mysql",
+			fmt.Sprintf("%s:%s@tcp(localhost:%d)/dialogues",
+				user, password, port))
+		if err != nil {
+			return
+		}
+		_, err = db.ExecContext(dc.ctx, `
+		CREATE TABLE IF NOT EXISTS users (
+			id    BIGINT AUTO_INCREMENT PRIMARY KEY,
+			login VARCHAR(25)
+		);`)
+		if err != nil {
+			return
+		}
+		_, err = db.ExecContext(dc.ctx, `
+		CREATE TABLE IF NOT EXISTS messages (
+			source      BIGINT,
+			dest        BIGINT,
+			txt         TEXT,
+			createdAt   TIMESTAMP,
+			PRIMARY KEY(source, dest, createdAt)
+		);`)
+		if err != nil {
+			return
+		}
+	}
+	// add proxysql hostgroups connections
 	dc.hosts, err = connectToHost("test1", "test1")
 	if err != nil {
 		return
 	}
-	_, err = dc.hosts.Exec(`
-	CREATE TABLE IF NOT EXISTS users (
-		id    BIGINT AUTO_INCREMENT PRIMARY KEY,
-		login VARCHAR(25)
-	);`)
-	if err != nil {
-		return
-	}
-	_, err = dc.hosts.Exec(`
-	CREATE TABLE IF NOT EXISTS messages (
-		source      BIGINT,
-		dest        BIGINT,
-		txt         TEXT,
-		createdAt   TIMESTAMP,
-		PRIMARY KEY(source, dest, createdAt)
-	);`)
-	if err != nil {
-		return
-	}
 	dc.dedicatedHosts, err = connectToHost("test2", "test2")
-	if err != nil {
-		return
-	}
-	_, err = dc.hosts.Exec(`
-	CREATE TABLE IF NOT EXISTS messages (
-		source      BIGINT,
-		dest        BIGINT,
-		txt         TEXT,
-		createdAt   TIMESTAMP,
-		PRIMARY KEY(source, dest, createdAt)
-	);`)
 	if err != nil {
 		return
 	}
