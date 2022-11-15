@@ -63,13 +63,15 @@ mysql_servers =
  		address="mysql4"
  		port=3306
  		hostgroup=2
- 		max_connections=200
+ 		max_connections=100
+		compression=1
  	},
     {
  		address="mysql5"
  		port=3306
  		hostgroup=2
- 		max_connections=200
+ 		max_connections=100
+		compression=1
  	}
 )
 

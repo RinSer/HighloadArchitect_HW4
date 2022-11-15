@@ -147,22 +147,27 @@ func (dc *Coordinator) GetDialogue(c echo.Context) (err error) {
 // Helpers
 
 func (dc *Coordinator) getUserMessages(userId1 int64, userId2 int64) ([]Message, error) {
-	host := dc.getUserHost(userId1)
-	rows, err := host.QueryContext(dc.ctx,
-		`SELECT source, dest, txt, createdAt FROM messages WHERE source = ? and dest = ?;`,
-		userId1, userId2)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 	msgs := make([]Message, 0)
-	for rows.Next() {
-		msg := Message{}
-		err := rows.Scan(&msg.From, &msg.To, &msg.Text, &msg.At)
+	userHosts := []*sql.DB{dc.hosts}
+	if _, ok := dc.dedicatedUsers[userId1]; ok {
+		userHosts = append(userHosts, dc.dedicatedHosts)
+	}
+	for _, host := range userHosts {
+		rows, err := host.QueryContext(dc.ctx,
+			`SELECT source, dest, txt, createdAt FROM messages WHERE source = ? and dest = ?;`,
+			userId1, userId2)
 		if err != nil {
 			return nil, err
 		}
-		msgs = append(msgs, msg)
+		defer rows.Close()
+		for rows.Next() {
+			msg := Message{}
+			err := rows.Scan(&msg.From, &msg.To, &msg.Text, &msg.At)
+			if err != nil {
+				return nil, err
+			}
+			msgs = append(msgs, msg)
+		}
 	}
 	return msgs, nil
 }
@@ -246,6 +251,6 @@ func (dc *Coordinator) initHosts() (err error) {
 
 func connectToHost(user string, password string) (*sql.DB, error) {
 	return sql.Open("mysql",
-		fmt.Sprintf("%s:%s@tcp(localhost:6033)/?parseTime=true",
+		fmt.Sprintf("%s:%s@tcp(localhost:6033)/dialogues?parseTime=true",
 			user, password))
 }
