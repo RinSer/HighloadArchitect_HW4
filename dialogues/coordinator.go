@@ -55,10 +55,11 @@ func NewCoordinator(proxySqlConnection string, redisHost string) (*Coordinator, 
 	}
 
 	dc := &Coordinator{
-		ctx:       ctx,
-		CancelCtx: cancel,
-		rdb:       rdb,
-		conn:      conn,
+		ctx:            ctx,
+		CancelCtx:      cancel,
+		rdb:            rdb,
+		conn:           conn,
+		dedicatedUsers: make(map[int64]bool),
 	}
 	err = dc.initHosts()
 	if err != nil {

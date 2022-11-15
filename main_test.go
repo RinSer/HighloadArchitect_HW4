@@ -164,22 +164,28 @@ func BenchmarkAddMessages(b *testing.B) {
 	// Send a lot of messages with
 	// 80% of them from dedicated users
 	b.RunParallel(func(pb *testing.PB) {
-		for i := 0; i < 2_0; i++ {
-			userId1 := dedicatedUsers[rand.Int63n(2)]
-			userId2 := users[rand.Int63n(10)]
-			probability := rand.Float32()
-			if probability < 0.2 {
-				userId1 = users[rand.Int63n(10)]
-			}
-			messageJSON := fmt.Sprintf(`{"from":%d,"to":%d,"text":"`+uuid.New().String()+`"}`,
-				userId1, userId2)
-			req := httptest.NewRequest(http.MethodPost, "/message",
-				strings.NewReader(messageJSON))
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-			rec := httptest.NewRecorder()
-			c := testServer.NewContext(req, rec)
-			if assert.NoError(b, testCoordinator.AddMessage(c)) {
-				assert.Equal(b, http.StatusCreated, rec.Code)
+		for pb.Next() {
+			for i := 0; i < 10_000; i++ {
+				userId1 := dedicatedUsers[rand.Int63n(int64(len(dedicatedUsers)))]
+				userId2 := users[rand.Int63n(int64(len(users)))]
+				probability := rand.Float32()
+				if probability < 0.2 {
+					userId1 = users[rand.Int63n(int64(len(users)))]
+				}
+				var builder strings.Builder
+				for i := 0; i < 13; i++ {
+					builder.WriteString(uuid.New().String())
+				}
+				messageJSON := fmt.Sprintf(`{"from":%d,"to":%d,"text":"`+builder.String()+`"}`,
+					userId1, userId2)
+				req := httptest.NewRequest(http.MethodPost, "/message",
+					strings.NewReader(messageJSON))
+				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+				rec := httptest.NewRecorder()
+				c := testServer.NewContext(req, rec)
+				if assert.NoError(b, testCoordinator.AddMessage(c)) {
+					assert.Equal(b, http.StatusCreated, rec.Code)
+				}
 			}
 		}
 	})
